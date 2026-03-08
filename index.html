@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<!--
+Sentive 前端页面
+
+提供句子搜索、随机获取、背景切换等功能的主界面
+作者：TREA_AI助手、云栖
+最后修改时间：2026-03-07
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Sentive</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* 全局样式重置，移除默认边距和内边距 */
+  *{margin:0;padding:0;box-sizing:border-box}
+  
+  /* 主体样式：全屏居中，背景图固定，平滑过渡 */
+  body{
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background-size:cover;background-position:center;background-attachment:fixed;
+    transition:background 0.6s ease, color 0.3s ease;
+    overflow:hidden
+  }
+  
+  /* 玻璃态效果：半透明背景 + 模糊滤镜 */
+  .glass{
+    background:rgba(20,20,30,0.35);backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,0.1);transition:all 0.3s
+  }
+  
+  /* 控件淡入淡出效果 */
+  .control{transition:opacity 0.8s ease}
+  
+  /* 时间显示样式：添加发光效果 */
+  #time{text-shadow:0 0 30px rgba(255,255,255,0.35);transition:color 0.3s ease}
+  
+  /* 结果卡片：限制最大高度，超出可滚动 */
+  #result-card{min-width:280px;max-width:90%;transition:all 0.3s ease;max-height:60vh;overflow-y:auto}
+  
+  /* 设置面板：默认隐藏，激活时滑入显示 */
+  #settings-panel{transform:translateY(20px);opacity:0;pointer-events:none;transition:all 0.3s ease}
+  #settings-panel.active{transform:translateY(0);opacity:1;pointer-events:auto}
+  
+  /* 搜索结果列表样式 */
+  .result-list{display:flex;flex-direction:column;gap:12px;padding:8px 0}
+  
+  /* 搜索结果项：带左侧边框和入场动画 */
+  .result-item{
+    background:rgba(255,255,255,0.05);
+    border-radius:8px;
+    padding:16px;
+    border-left:3px solid rgba(255,255,255,0.3);
+    transition:all 0.3s ease;
+    opacity:0;
+    transform:translateX(-20px);
+    animation:slideIn 0.4s ease forwards;
+  }
+  
+  /* 悬停效果：背景变亮，轻微右移 */
+  .result-item:hover{background:rgba(255,255,255,0.1);transform:translateX(5px)}
+  
+  /* 句子内容样式 */
+  .result-content{font-size:1.1rem;line-height:1.6;margin-bottom:8px}
+  
+  /* 元信息样式：作者和分类标签 */
+  .result-meta{display:flex;gap:12px;font-size:0.85rem;opacity:0.7}
+  .result-tag{background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px}
+  
+  /* 线性动画：从左滑入 */
+  @keyframes slideIn{
+    to{opacity:1;transform:translateX(0)}
+  }
+  
+  /* 加载动画：流光进度条 */
+  .loading-bar{
+    width:100%;
+    height:3px;
+    background:rgba(255,255,255,0.1);
+    border-radius:2px;
+    overflow:hidden;
+    margin:12px 0;
+  }
+  .loading-bar::after{
+    content:'';
+    display:block;
+    height:100%;
+    width:30%;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,0.8),transparent);
+    animation:loading 1s infinite;
+  }
+  @keyframes loading{
+    0%{transform:translateX(-100%)}
+    100%{transform:translateX(350%)}
+  }
+  
+  /* 加载状态文字 */
+  .loading-text{
+    text-align:center;
+    padding:20px;
+    opacity:0.7;
+    font-size:0.95rem;
+  }
+  
+  /* 搜索结果数量提示 */
+  .result-count{
+    font-size:0.85rem;
+    opacity:0.6;
+    margin-bottom:12px;
+    text-align:center;
+  }
+  
+  /* 响应式适配：小屏幕调整布局 */
+  @media(max-width:640px){
+    #result-card{max-width:95%;min-width:auto}
+    .result-content{font-size:1rem}
+    .result-item{padding:12px}
+  }
+</style>
+</head>
+
+<body class="bg-[#121218] text-white">
+  <!-- 居中时间（核心屏保） -->
+  <div id="time" class="text-[clamp(3rem,8vw,7rem)] font-light tracking-wider mb-8">
+    00:00:00
+  </div>
+
+  <!-- 可隐藏控件区 -->
+  <div class="controls w-full max-w-2xl px-4 flex flex-col gap-5 items-center">
+    <!-- 搜索+随机 -->
+    <div class="w-full relative">
+      <input id="search" placeholder="搜索句子..."
+             class="w-full px-5 py-3 rounded-lg glass text-lg outline-none">
+      <button id="search-btn" class="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1 rounded bg-white/10 hover:bg-white/20">
+        搜索
+      </button>
+    </div>
+    <!-- 句子卡片：点击获取随机句子 -->
+    <div id="result-card" class="glass rounded-lg px-6 py-4 w-fit cursor-pointer hover:bg-white/5 transition-all">
+      <div id="result-container">
+        <p id="sentence" class="text-lg text-center">点击卡片获取随机句子</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右下角设置按钮 -->
+  <button id="setting-btn" class="controls fixed bottom-4 right-4 w-10 h-10 rounded-full glass flex items-center justify-center">
+    ⚙️
+  </button>
+
+  <!-- 设置面板 -->
+  <div id="settings-panel" class="fixed bottom-16 right-4 w-72 p-4 rounded-lg glass flex flex-col gap-3">
+    <h3 class="text-sm font-bold mb-1">Sentive 设置</h3>
+    <!-- 服务端IP选择 -->
+    <div class="flex flex-col gap-2">
+      <label class="text-xs text-gray-300">服务端IP</label>
+      <input id="server-ip" placeholder="输入服务端IP地址" class="px-3 py-2 rounded glass text-sm outline-none">
+      <select id="preset-ip" class="px-3 py-2 rounded glass text-sm outline-none">
+        <option value="http://localhost:5000">本地服务器 (localhost:5000)</option>
+        <option value="http://127.0.0.1:5000">本地服务器 (127.0.0.1:5000)</option>
+      </select>
+    </div>
+    <!-- 背景链接 -->
+    <input id="bg-link" placeholder="背景图链接 回车应用" class="px-3 py-2 rounded glass text-sm outline-none">
+    <!-- 本地上传背景 -->
+    <input type="file" id="bg-upload" accept="image/*" class="text-sm opacity-80">
+    <!-- 背景预设 -->
+    <select id="bg-preset" class="px-3 py-2 rounded glass text-sm outline-none">
+      <option value="">选择背景预设</option>
+      <!-- 动态生成背景预设选项 -->
+    </select>
+    <!-- 字体颜色 -->
+    <input type="color" id="font-color" class="w-full h-8 rounded cursor-pointer">
+    <!-- 字体选择 -->
+    <select id="font-family" class="px-3 py-2 rounded glass text-sm outline-none">
+      <option value="system-ui">默认字体</option>
+      <option value="Arial">Arial</option>
+      <option value="Times New Roman">Times New Roman</option>
+      <option value="Microsoft YaHei">微软雅黑</option>
+      <option value="SimHei">黑体</option>
+      <option value="Courier New">等宽体</option>
+    </select>
+  </div>
+
+<script>
+// 全局变量声明（在DOM加载完成后初始化）
+let API
+let hideTimer
+let controls
+let bgPresets = []
+let defaultBgId = "starry-night"
+
+/**
+ * 页面加载完成后自动全屏并初始化所有功能
+ * 使用setTimeout避免浏览器阻止自动全屏
+ */
+window.onload = ()=>{
+  // 初始化全局变量（确保DOM已加载）
+  API = localStorage.getItem("sentive-api") || "http://localhost:5000"
+  controls = document.querySelectorAll(".controls")
+  
+  setTimeout(()=>document.documentElement.requestFullscreen().catch(()=>{}),300)
+  initAll()
+}
+
+/**
+ * 初始化所有功能模块
+ * 按顺序执行：时间更新、加载背景预设、加载设置、绑定事件、获取随机句子、启动屏保
+ */
+async function initAll(){
+  updateTime()
+  setInterval(updateTime,1000)
+  await loadBgPresets()
+  loadSettings()
+  initEvents()
+  fetchRandom()
+  startHideTimer()
+}
+
+/**
+ * 从后端API加载背景预设配置
+ * 动态扫描img文件夹并生成预设选项到下拉菜单
+ * 
+ * 后端会自动扫描img文件夹中的图片文件，
+ * 结合在线预设一起返回
+ * 
+ * @returns {Promise<void>} 异步加载完成
+ */
+async function loadBgPresets(){
+  try{
+    console.log('开始加载背景预设配置...')
+    console.log('API地址:', API)
+    
+    // 从后端API获取预设列表，自动适配img文件夹中的图片
+    const response = await fetch(`${API}/api/bg-presets`)
+    
+    // 检查HTTP响应状态码
+    if(!response.ok){
+      throw new Error(`HTTP错误! 状态码: ${response.status}`)
+    }
+    
+    console.log('HTTP响应状态:', response.status)
+    const data = await response.json()
+    console.log('解析的JSON数据:', data)
+    console.log('预设总数:', data.count)
+    
+    // 验证数据格式
+    if(!data.presets || !Array.isArray(data.presets)){
+      throw new Error('数据格式错误: presets字段不存在或不是数组')
+    }
+    
+    bgPresets = data.presets
+    defaultBgId = data.default
+    console.log('背景预设加载成功:', bgPresets.length, '个预设')
+    console.log('在线预设:', bgPresets.filter(p => !p.id.startsWith('local-')).length, '个')
+    console.log('本地预设:', bgPresets.filter(p => p.id.startsWith('local-')).length, '个')
+    
+    // 清空现有选项并重新生成
+    const bgPresetSelect = document.getElementById('bg-preset')
+    if(!bgPresetSelect){
+      throw new Error('找不到背景预设选择元素')
+    }
+    
+    bgPresetSelect.innerHTML = '<option value="">选择背景预设</option>'
+    
+    // 遍历预设列表，创建option元素
+    bgPresets.forEach(preset => {
+      const option = document.createElement('option')
+      option.value = preset.id
+      option.textContent = preset.name
+      bgPresetSelect.appendChild(option)
+    })
+    
+    console.log('背景预设选项生成完成')
+  }catch(e){
+    console.error('加载背景预设失败:', e.message)
+    console.error('错误堆栈:', e.stack)
+    // 失败时回退到默认预设，确保功能可用
+    bgPresets = [
+      {id: 'starry-night', name: '星空', url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1950&q=80'}
+    ]
+    console.log('使用回退预设:', bgPresets)
+  }
+}
+
+/**
+ * 更新时间显示
+ * 每秒调用一次，显示当前时间（24小时制）
+ */
+function updateTime(){
+  document.getElementById("time").innerText = new Date().toLocaleTimeString("zh-CN",{hour12:false})
+}
+
+/**
+ * 启动屏保定时器
+ * 鼠标静止5秒后隐藏所有控件，移动鼠标时重新显示
+ */
+function startHideTimer(){
+  clearTimeout(hideTimer)
+  controls.forEach(e=>e.style.opacity=1)
+  hideTimer = setTimeout(()=>{
+    controls.forEach(e=>e.style.opacity=0)
+  },5000)
+}
+
+/**
+ * 从localStorage加载用户设置
+ * 包括：背景、字体颜色、字体、API地址
+ * 如果没有保存的背景，使用默认背景预设
+ */
+function loadSettings(){
+  const bg = localStorage.getItem("sentive-bg")
+  const color = localStorage.getItem("sentive-color")||"#ffffff"
+  const font = localStorage.getItem("sentive-font")||"system-ui"
+  const api = localStorage.getItem("sentive-api")||"http://localhost:5000"
+  
+  // 获取默认背景预设
+  const defaultPreset = bgPresets.find(preset => preset.id === defaultBgId) || bgPresets[0]
+  
+  if(bg){
+    // 如果有保存的背景，直接应用
+    document.body.style.backgroundImage = `url(${bg})`
+    document.getElementById("bg-link").value = bg
+    // 尝试匹配预设ID，如果匹配则选中对应预设
+    const matchedPreset = bgPresets.find(preset => preset.url === bg)
+    if(matchedPreset){
+      document.getElementById("bg-preset").value = matchedPreset.id
+    }
+  }else if(defaultPreset){
+    // 没有保存的背景，使用默认预设
+    document.body.style.backgroundImage = `url(${defaultPreset.url})`
+    document.getElementById("bg-link").value = defaultPreset.url
+    document.getElementById("bg-preset").value = defaultPreset.id
+    saveSettings("sentive-bg", defaultPreset.url)
+  }
+  
+  // 应用字体设置
+  document.getElementById("time").style.color = color
+  document.body.style.fontFamily = font
+  document.getElementById("font-color").value = color
+  document.getElementById("font-family").value = font
+  
+  // 应用API地址设置
+  document.getElementById("server-ip").value = api
+  document.getElementById("preset-ip").value = api
+}
+
+/**
+ * 保存设置到localStorage
+ * 
+ * @param {string} key - 设置项的键名
+ * @param {string} val - 设置项的值
+ */
+function saveSettings(key,val){
+  localStorage.setItem(key,val)
+}
+
+/**
+ * 初始化所有事件监听器
+ * 包括：鼠标移动、设置面板开关、搜索、背景切换、字体设置等
+ */
+function initEvents(){
+  // 鼠标移动时唤醒控件
+  document.addEventListener("mousemove",startHideTimer)
+  document.addEventListener("touchstart",startHideTimer)
+
+  // 设置面板开关：点击齿轮图标切换面板显示状态
+  const settingBtn = document.getElementById("setting-btn")
+  const panel = document.getElementById("settings-panel")
+  settingBtn.onclick = ()=>panel.classList.toggle("active")
+
+  // 搜索按钮点击：获取输入框内容并执行搜索
+  document.getElementById("search-btn").onclick = ()=>{
+    const kw = document.getElementById("search").value.trim()
+    if(kw) search(kw)
+  }
+
+  // 点击卡片获取随机句子
+  document.getElementById("result-card").onclick = fetchRandom
+
+  // 回车搜索：在搜索框按回车键触发搜索
+  document.getElementById("search").onkeydown = (e)=>{
+    if(e.key==="Enter") search(e.target.value.trim())
+  }
+
+  // 背景链接：输入URL后按回车应用
+  document.getElementById("bg-link").onkeydown = (e)=>{
+    if(e.key==="Enter"){
+      const url = e.target.value.trim()
+      document.body.style.backgroundImage = `url(${url})`
+      saveSettings("sentive-bg",url)
+    }
+  }
+
+  // 本地上传背景：将图片转换为base64并应用
+  document.getElementById("bg-upload").onchange = (e)=>{
+    const file = e.target.files[0]
+    if(!file) return
+    const reader = new FileReader()
+    reader.onload = (ev)=>{
+      const base64 = ev.target.result
+      document.body.style.backgroundImage = `url(${base64})`
+      saveSettings("sentive-bg",base64)
+      document.getElementById("bg-link").value = "本地图片"
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 字体颜色：实时预览并保存
+  document.getElementById("font-color").oninput = (e)=>{
+    const color = e.target.value
+    document.getElementById("time").style.color = color
+    saveSettings("sentive-color",color)
+  }
+
+  // 字体选择：切换字体并保存
+  document.getElementById("font-family").onchange = (e)=>{
+    const font = e.target.value
+    document.body.style.fontFamily = font
+    saveSettings("sentive-font",font)
+  }
+  
+  // 服务端IP输入：输入后按回车保存并更新API地址
+  document.getElementById("server-ip").onkeydown = (e)=>{
+    if(e.key==="Enter"){
+      const ip = e.target.value.trim()
+      if(ip){
+        API = ip
+        saveSettings("sentive-api",ip)
+        document.getElementById("preset-ip").value = ip
+      }
+    }
+  }
+  
+  // 服务端IP预设选择：从下拉菜单选择预设IP
+  document.getElementById("preset-ip").onchange = (e)=>{
+    const ip = e.target.value
+    if(ip){
+      API = ip
+      saveSettings("sentive-api",ip)
+      document.getElementById("server-ip").value = ip
+    }
+  }
+  
+  // 背景预设选择：根据ID查找预设并应用
+  document.getElementById("bg-preset").onchange = (e)=>{
+    const presetId = e.target.value
+    if(presetId){
+      const preset = bgPresets.find(p => p.id === presetId)
+      if(preset){
+        document.body.style.backgroundImage = `url(${preset.url})`
+        saveSettings("sentive-bg", preset.url)
+        document.getElementById("bg-link").value = preset.url
+      }
+    }
+  }
+}
+
+/**
+ * 请求后端获取随机句子
+ * 
+ * @returns {Promise<void>} 异步请求完成
+ */
+async function fetchRandom(){
+  try{
+    let d = await (await fetch(API+"/api/random")).json()
+    showSingleResult(d.sentence)
+  }catch(e){
+    showSingleResult("请启动后端服务")
+  }
+}
+
+/**
+ * 显示单个句子结果
+ * 如果是对象则显示完整信息（内容、作者、分类），否则显示纯文本
+ * 
+ * @param {Object|string} sentence - 句子数据或错误信息
+ */
+function showSingleResult(sentence){
+  const container = document.getElementById("result-container")
+  if(typeof sentence === 'object'){
+    // 对象格式：显示完整信息
+    container.innerHTML = `
+      <div class="result-list">
+        <div class="result-item" style="animation-delay:0s">
+          <div class="result-content">${sentence.content}</div>
+          <div class="result-meta">
+            <span class="result-tag">${sentence.author}</span>
+            <span class="result-tag">${sentence.category}</span>
+          </div>
+        </div>
+      </div>
+    `
+  }else{
+    // 字符串格式：直接显示
+    container.innerHTML = `<p class="text-lg text-center">${sentence}</p>`
+  }
+}
+
+/**
+ * 显示加载状态
+ * 显示加载文字和流光进度条动画
+ */
+function showLoading(){
+  const container = document.getElementById("result-container")
+  container.innerHTML = `
+    <div class="loading-text">正在搜索...</div>
+    <div class="loading-bar"></div>
+  `
+}
+
+/**
+ * 显示搜索结果列表
+ * 每个结果项带有错开的入场动画，提升视觉效果
+ * 
+ * @param {Array} results - 搜索结果数组
+ * @param {number} count - 结果数量
+ */
+function showResultList(results, count){
+  const container = document.getElementById("result-container")
+  if(!results || results.length === 0){
+    container.innerHTML = `<p class="text-lg text-center">未找到匹配句子</p>`
+    return
+  }
+  
+  // 显示结果数量
+  let html = `<div class="result-count">找到 ${count} 条结果</div>`
+  html += `<div class="result-list">`
+  
+  // 遍历结果，每个结果项带有递增的动画延迟
+  results.forEach((item, index) => {
+    html += `
+      <div class="result-item" style="animation-delay:${index * 0.08}s">
+        <div class="result-content">${item.content}</div>
+        <div class="result-meta">
+          <span class="result-tag">${item.author}</span>
+          <span class="result-tag">${item.category}</span>
+        </div>
+      </div>
+    `
+  })
+  
+  html += `</div>`
+  container.innerHTML = html
+}
+
+/**
+ * 执行搜索功能
+ * 先显示加载状态，然后请求后端，最后显示结果
+ * 
+ * @param {string} kw - 搜索关键词
+ * @returns {Promise<void>} 异步搜索完成
+ */
+async function search(kw){
+  if(!kw) return
+  showLoading()
+  try{
+    let d = await (await fetch(API+"/api/search?kw="+encodeURIComponent(kw))).json()
+    showResultList(d.results, d.count)
+  }catch(e){
+    document.getElementById("result-container").innerHTML = `<p class="text-lg text-center">搜索失败，请检查网络连接</p>`
+  }
+}
+</script>
+</body>
+</html>
