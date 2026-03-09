@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Sentive</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 全部CSS内嵌在这里 -->
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{
@@ -43,10 +42,8 @@
 </head>
 
 <body class="bg-[#121218] text-white">
-  <!-- 时间 -->
   <div id="time" class="text-[clamp(3rem,8vw,7rem)] font-light tracking-wider mb-8">00:00:00</div>
 
-  <!-- 控件 -->
   <div class="controls w-full max-w-2xl px-4 flex flex-col gap-5 items-center">
     <div class="w-full relative">
       <input id="search" placeholder="搜索句子..." class="w-full px-5 py-3 rounded-lg glass text-lg outline-none">
@@ -57,18 +54,15 @@
     </div>
   </div>
 
-  <!-- 设置按钮 -->
   <button id="setting-btn" class="controls fixed bottom-4 right-4 w-10 h-10 rounded-full glass flex items-center justify-center">⚙️</button>
 
-  <!-- 设置面板 -->
   <div id="settings-panel" class="fixed bottom-16 right-4 w-72 p-4 rounded-lg glass flex flex-col gap-3">
     <h3 class="text-sm font-bold mb-1">Sentive 设置</h3>
     <div class="flex flex-col gap-2">
       <label class="text-xs text-gray-300">服务端IP</label>
       <input id="server-ip" placeholder="输入服务端IP地址" class="px-3 py-2 rounded glass text-sm outline-none">
       <select id="preset-ip" class="px-3 py-2 rounded glass text-sm outline-none">
-        <option value="http://localhost:5000">本地 localhost:5000</option>
-        <option value="http://127.0.0.1:5000">本地 127.0.0.1:5000</option>
+        <option value="http://49.235.191.119:5000">服务器 49.235.191.119:5000</option>
       </select>
     </div>
     <input id="bg-link" placeholder="背景图链接 回车应用" class="px-3 py-2 rounded glass text-sm outline-none">
@@ -86,19 +80,17 @@
   </div>
 
   <script>
-    // 全局变量
     let API, hideTimer, controls, bgPresets = []
     let defaultBgId = "starry-night"
 
-    // 页面加载
     window.onload = ()=>{
-      API = localStorage.getItem("sentive-api") || "http://localhost:5000"
+      // 👇 这里已改成你的服务器IP
+      API = localStorage.getItem("sentive-api") || "http://49.235.191.119:5000"
       controls = document.querySelectorAll(".controls")
       setTimeout(()=>document.documentElement.requestFullscreen().catch(()=>{}),300)
       initAll()
     }
 
-    // 初始化所有功能
     async function initAll(){
       updateTime()
       setInterval(updateTime,1000)
@@ -109,7 +101,6 @@
       startHideTimer()
     }
 
-    // 加载背景预设
     async function loadBgPresets(){
       try{
         const res = await fetch(`${API}/api/bg-presets`)
@@ -131,24 +122,22 @@
       }
     }
 
-    // 更新时间
     function updateTime(){
       document.getElementById("time").innerText = new Date().toLocaleTimeString("zh-CN",{hour12:false})
     }
 
-    // 自动隐藏控件
     function startHideTimer(){
       clearTimeout(hideTimer)
       controls.forEach(e=>e.style.opacity=1)
       hideTimer = setTimeout(()=>controls.forEach(e=>e.style.opacity=0),5000)
     }
 
-    // 加载设置
     function loadSettings(){
       const bg = localStorage.getItem("sentive-bg")
       const color = localStorage.getItem("sentive-color")||"#fff"
       const font = localStorage.getItem("sentive-font")||"system-ui"
-      const api = localStorage.getItem("sentive-api")||"http://localhost:5000"
+      // 👇 这里已改成你的服务器IP
+      const api = localStorage.getItem("sentive-api")||"http://49.235.191.119:5000"
       const defaultPreset = bgPresets.find(p=>p.id===defaultBgId)||bgPresets[0]
 
       if(bg){
@@ -171,7 +160,6 @@
       document.getElementById("preset-ip").value = api
     }
 
-    // 绑定事件
     function initEvents(){
       document.addEventListener("mousemove",startHideTimer)
       document.addEventListener("touchstart",startHideTimer)
@@ -256,7 +244,6 @@
       }
     }
 
-    // 获取随机句子
     async function fetchRandom(){
       try{
         const d = await (await fetch(API+"/api/random")).json()
@@ -266,7 +253,6 @@
       }
     }
 
-    // 显示单句
     function showSingle(s){
       const con = document.getElementById("result-container")
       if(typeof s==='object'){
@@ -285,7 +271,6 @@
       }
     }
 
-    // 搜索
     async function search(kw){
       if(!kw) return
       document.getElementById("result-container").innerHTML = `<div class="loading-text">正在搜索...</div><div class="loading-bar"></div>`
